@@ -5,18 +5,22 @@ every row from `database.repository`, every colour from `style`.
 
 Navigation follows the brief: asset class -> geography -> exchange ->
 security -> analysis, with a way back to the main dashboard at each step.
+The map and the back button stay mounted at all times and are hidden with
+CSS, because a Dash callback never fires while one of its inputs is absent
+from the layout.
 """
 from datetime import date
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, callback, ctx, dash_table, dcc, html
+from dash import (ALL, Dash, Input, Output, State, callback, ctx, dash_table,
+                  dcc, html, no_update)
 
 import style
 from analytics import metrics
-from database.connection import database_exists
 from database import repository
+from database.connection import database_exists
 
 if not database_exists():
     raise SystemExit("Database non trovato. Lancia prima: python -m database.populate")
@@ -74,7 +78,7 @@ def markets_of_asset_class(asset_class: str) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Application
+# Application shell
 # ---------------------------------------------------------------------------
 
 app = Dash(__name__, title="MFE | Multi Market Platform",
@@ -127,6 +131,7 @@ app.layout = html.Div(
     children=[
         header(),
         dcc.Store(id="selected-market"),
+        dcc.Store(id="selected-scope", data="Mondo"),
         html.Div(
             style=style.CONTAINER,
             children=[
@@ -134,9 +139,18 @@ app.layout = html.Div(
                     asset_class_selector(),
                     html.Div(id="continent-buttons",
                              style={"display": "flex", "alignItems": "flex-end"}),
+                    html.Button("← Torna alla mappa", id="back-to-map", n_clicks=0,
+                                style={**style.BACK_BUTTON, "display": "none"}),
                 ]),
                 html.Div(id="breadcrumb", style=style.BREADCRUMB),
-                html.Div(id="navigation-area"),
+                html.Div(id="nav-panel", children=[
+                    html.Div(style=style.PANEL, children=[
+                        html.H3("Seleziona una piazza finanziaria",
+                                style=style.PANEL_TITLE),
+                        dcc.Graph(id="world-map",
+                                  config={"displayModeBar": False}),
+                    ]),
+                ]),
                 html.Div(id="market-page"),
             ],
         ),
@@ -145,18 +159,19 @@ app.layout = html.Div(
 
 
 # ---------------------------------------------------------------------------
-# Step 1-2: asset class -> continent buttons -> world map
+# Step 1: asset class -> continent buttons
 # ---------------------------------------------------------------------------
 
 @callback(
     Output("continent-buttons", "children"),
     Input("asset-class", "value"),
-    Input("selected-market", "data"),
 )
-def build_continent_buttons(asset_class, selected_market):
-    """Only continents where this asset class is actually traded are shown."""
-    if selected_market:
-        return []
+def build_continent_buttons(asset_class):
+    """Only continents where this asset class is actually traded are listed.
+
+    Rebuilt on asset class change only: rebuilding them on every scope change
+    would remount the buttons and retrigger their own click callback.
+    """
     frame = markets_of_asset_class(asset_class)
     available = sorted({geography_of(code)["continent"]
                         for code in frame["market_code"]})
@@ -169,41 +184,68 @@ def build_continent_buttons(asset_class, selected_market):
 
 
 @callback(
-    Output("navigation-area", "children"),
+    Output("selected-scope", "data"),
+    Input({"type": "continent", "index": ALL}, "n_clicks"),
     Input("asset-class", "value"),
-    Input("selected-market", "data"),
-    Input({"type": "continent", "index": dash_table.ALL if False else str}, "n_clicks"),
-    prevent_initial_call=False,
+    prevent_initial_call=True,
 )
-def render_navigation(asset_class, selected_market, _clicks):
-    """World map with one marker per exchange. Click a marker to enter it."""
-    if selected_market:
-        return []
-
-    frame = markets_of_asset_class(asset_class)
-    if frame.empty:
-        return html.Div("Nessun mercato disponibile per questa asset class.",
-                        style=style.EMPTY_STATE)
-
-    # Which continent button was pressed last, if any.
-    scope = "world"
+def pick_scope(_clicks, _asset_class):
+    """Store the continent the user asked for. Changing asset class resets it."""
     triggered = ctx.triggered_id
+    if triggered == "asset-class":
+        return "Mondo"
     if isinstance(triggered, dict) and triggered.get("type") == "continent":
-        scope = CONTINENT_SCOPE.get(triggered["index"], "world")
+        # Freshly mounted buttons report n_clicks = 0: that is not a click.
+        if not ctx.triggered[0]["value"]:
+            return no_update
+        return triggered["index"]
+    return no_update
+
+
+@callback(
+    Output({"type": "continent", "index": ALL}, "style"),
+    Input("selected-scope", "data"),
+    State({"type": "continent", "index": ALL}, "id"),
+)
+def highlight_active_continent(scope, button_ids):
+    """Gold fill on the active continent. Styles only: no remount."""
+    return [
+        style.CONTINENT_BUTTON_ACTIVE if button["index"] == scope
+        else style.CONTINENT_BUTTON
+        for button in button_ids
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Step 2: world map
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output("world-map", "figure"),
+    Input("asset-class", "value"),
+    Input("selected-scope", "data"),
+)
+def draw_map(asset_class, scope_label):
+    """One marker per exchange of the selected asset class."""
+    frame = markets_of_asset_class(asset_class)
+    scope = CONTINENT_SCOPE.get(scope_label, "world")
+
+    if frame.empty:
+        empty = go.Figure(go.Scattergeo(lat=[], lon=[]))
+        return style.style_map(empty, scope)
 
     records = []
     for row in frame.itertuples():
         geo = geography_of(row.market_code)
-        count = len(repository.list_instruments(row.market_code,
-                                                include_benchmark=True))
+        instruments = repository.list_instruments(row.market_code,
+                                                  include_benchmark=True)
         records.append({
             "market_code": row.market_code,
             "label": row.label,
             "exchange": geo["exchange"],
-            "city": geo["city"],
             "lat": geo["lat"],
             "lon": geo["lon"],
-            "strumenti": count,
+            "strumenti": len(instruments),
         })
     points = pd.DataFrame(records)
 
@@ -224,15 +266,7 @@ def render_navigation(asset_class, selected_market, _clicks):
         hovertemplate="<b>%{customdata[1]}</b><br>%{text}"
                       "<br>%{customdata[2]} strumenti<extra></extra>",
     ))
-    style.style_map(figure, scope)
-
-    return html.Div([
-        html.Div(style=style.PANEL, children=[
-            html.H3("Seleziona una piazza finanziaria", style=style.PANEL_TITLE),
-            dcc.Graph(id="world-map", figure=figure,
-                      config={"displayModeBar": False}),
-        ]),
-    ])
+    return style.style_map(figure, scope)
 
 
 @callback(
@@ -243,14 +277,40 @@ def render_navigation(asset_class, selected_market, _clicks):
     prevent_initial_call=True,
 )
 def select_market(click_data, _asset_class, _back_clicks):
-    """Enter an exchange from the map; leave it from the back button.
-    Changing asset class also returns to the map."""
+    """Enter an exchange by clicking its marker; leave it from the back button.
+    Switching asset class also returns to the map."""
     triggered = ctx.triggered_id
     if triggered in ("asset-class", "back-to-map"):
         return None
     if click_data:
         return click_data["points"][0]["customdata"][0]
     return None
+
+
+@callback(
+    Output("world-map", "clickData"),
+    Input("back-to-map", "n_clicks"),
+    Input("asset-class", "value"),
+    prevent_initial_call=True,
+)
+def clear_map_selection(_back_clicks, _asset_class):
+    """Reset the stored click so the same marker can be opened twice in a row."""
+    return None
+
+
+@callback(
+    Output("nav-panel", "style"),
+    Output("back-to-map", "style"),
+    Output("continent-buttons", "style"),
+    Input("selected-market", "data"),
+)
+def toggle_navigation(market_code):
+    """Hide the map while inside an exchange; never unmount it."""
+    hidden = {"display": "none"}
+    visible_buttons = {"display": "flex", "alignItems": "flex-end"}
+    if market_code:
+        return hidden, style.BACK_BUTTON, hidden
+    return {}, {**style.BACK_BUTTON, "display": "none"}, visible_buttons
 
 
 # ---------------------------------------------------------------------------
@@ -290,8 +350,8 @@ def render_market_page(market_code):
          "value": row.ticker}
         for row in instruments.itertuples()
     ]
-    first_security = instruments[instruments["is_benchmark"] == 0]
-    default_value = (first_security.iloc[0]["ticker"] if not first_security.empty
+    securities = instruments[instruments["is_benchmark"] == 0]
+    default_value = (securities.iloc[0]["ticker"] if not securities.empty
                      else instruments.iloc[0]["ticker"])
 
     return html.Div([
@@ -331,8 +391,6 @@ def render_market_page(market_code):
                         style={"width": "170px"},
                     ),
                 ]),
-                html.Button("← Torna alla mappa", id="back-to-map", n_clicks=0,
-                            style=style.BACK_BUTTON),
             ]),
         ]),
 
@@ -364,10 +422,12 @@ def render_market_page(market_code):
 def _format_metric(key: str, value) -> str:
     if value is None or (isinstance(value, float) and value != value):
         return "n/d"
-    if key == "Osservazioni":
+    if key == "Osservazioni" or key == "Numero strumenti":
         return f"{value:,.0f}".replace(",", ".")
     if any(word in key for word in ("Sharpe", "Sortino", "Beta")):
         return f"{value:.2f}"
+    if "(%)" in key:
+        return f"{value:.2f}%"
     return f"{value:.2%}"
 
 
@@ -397,6 +457,10 @@ def _table(frame: pd.DataFrame) -> dash_table.DataTable:
 def _panel(title: str, *children) -> html.Div:
     return html.Div(style=style.PANEL,
                     children=[html.H3(title, style=style.PANEL_TITLE), *children])
+
+
+def _graph(figure) -> dcc.Graph:
+    return dcc.Graph(figure=figure, config={"displaylogo": False})
 
 
 # ---------------------------------------------------------------------------
@@ -433,12 +497,10 @@ def render_tab(tab, ticker, start, end, frequency, market_code):
         return html.Div([
             _panel("Indicatori aggregati di mercato",
                    _tiles(metrics.market_aggregates(closes))),
-            _panel("Performance comparata (base 100)",
-                   dcc.Graph(figure=comparison, config={"displaylogo": False})),
+            _panel("Performance comparata (base 100)", _graph(comparison)),
             _panel("Statistiche cross-section",
                    _table(metrics.market_statistics(closes))),
-            _panel("Matrice di correlazione",
-                   dcc.Graph(figure=heatmap, config={"displaylogo": False})),
+            _panel("Matrice di correlazione", _graph(heatmap)),
         ])
 
     if not ticker:
@@ -454,17 +516,16 @@ def render_tab(tab, ticker, start, end, frequency, market_code):
     if tab == "prices":
         blocks = [
             _panel("Serie storica",
-                   dcc.Graph(figure=style.style_figure(px.line(close),
-                                                       show_legend=False),
-                             config={"displaylogo": False})),
+                   _graph(style.style_figure(px.line(close), show_legend=False))),
             _panel("Performance cumulata (base 100)",
-                   dcc.Graph(figure=style.style_figure(
+                   _graph(style.style_figure(
                        px.area(metrics.cumulative_return(close)),
-                       show_legend=False), config={"displaylogo": False})),
+                       show_legend=False))),
         ]
         fundamentals = repository.get_fundamentals(ticker)
-        clean = {k.replace("_", " ").title(): v for k, v in fundamentals.items()
-                 if k != "ticker" and v is not None}
+        clean = {key.replace("_", " ").title(): value
+                 for key, value in fundamentals.items()
+                 if key != "ticker" and value is not None}
         if clean:
             blocks.append(_panel("Fondamentali", html.Div(
                 style=style.TILE_ROW,
@@ -475,10 +536,10 @@ def render_tab(tab, ticker, start, end, frequency, market_code):
                 ]) for key, value in clean.items()])))
         dividends = repository.get_dividends(ticker)
         if not dividends.empty:
-            blocks.append(_panel("Dividendi", dcc.Graph(
-                figure=style.style_figure(
-                    px.bar(dividends, x="date", y="amount"), height=280,
-                    show_legend=False), config={"displaylogo": False})))
+            bars = px.bar(dividends, x="date", y="amount")
+            bars.update_traces(marker_color=style.COLORS["gold"])
+            blocks.append(_panel("Dividendi", _graph(
+                style.style_figure(bars, height=280, show_legend=False))))
         return html.Div(blocks)
 
     if tab == "returns":
@@ -489,12 +550,10 @@ def render_tab(tab, ticker, start, end, frequency, market_code):
         histogram.update_traces(marker_color=style.COLORS["gold"])
         return html.Div([
             _panel("Rendimenti logaritmici (%)",
-                   dcc.Graph(figure=style.style_figure(bars, show_legend=False),
-                             config={"displaylogo": False})),
+                   _graph(style.style_figure(bars, show_legend=False))),
             _panel("Distribuzione dei rendimenti",
-                   dcc.Graph(figure=style.style_figure(histogram, height=320,
-                                                       show_legend=False),
-                             config={"displaylogo": False})),
+                   _graph(style.style_figure(histogram, height=320,
+                                             show_legend=False))),
         ])
 
     # tab == "risk"
@@ -516,12 +575,9 @@ def render_tab(tab, ticker, start, end, frequency, market_code):
     return html.Div([
         _panel("Indicatori di rischio", _tiles(metrics.summary(close, benchmark))),
         _panel("Drawdown (%)",
-               dcc.Graph(figure=style.style_figure(drawdown, show_legend=False),
-                         config={"displaylogo": False})),
+               _graph(style.style_figure(drawdown, show_legend=False))),
         _panel("Volatilità annualizzata su finestra mobile 60 giorni (%)",
-               dcc.Graph(figure=style.style_figure(rolling, height=300,
-                                                   show_legend=False),
-                         config={"displaylogo": False})),
+               _graph(style.style_figure(rolling, height=300, show_legend=False))),
     ])
 
 
