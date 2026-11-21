@@ -1,0 +1,6 @@
+# Runtime dependencies (exact versions tested together)
+PySide6-Essentials==6.12.0   # Qt 6 for Python: windows and widgets (LGPL)
+argon2-cffi==25.1.0          # Argon2id password hashing
+cryptography==50.0.2         # AES-256-GCM encryption of the TOTP secret
+pyotp==2.12.1                # TOTP one-time codes (RFC 6238)
+qrcode==8.2                  # QR code for the authenticator app
