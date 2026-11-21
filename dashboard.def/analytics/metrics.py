@@ -56,18 +56,22 @@ def total_return(prices: pd.Series) -> float:
 
 def annualised_return(returns: pd.Series) -> float:
     """Mean daily log return scaled to one year."""
+    if returns.empty:
+        return float("nan")
     return float(returns.mean() * TRADING_DAYS)
 
 
 def annualised_volatility(returns: pd.Series) -> float:
     """Standard deviation scaled by the square root of time."""
+    if len(returns) < 2:
+        return float("nan")
     return float(returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
 
 
 def sharpe_ratio(returns: pd.Series, risk_free: float = RISK_FREE_RATE) -> float:
     """Excess return per unit of total volatility."""
     volatility = annualised_volatility(returns)
-    if volatility == 0 or np.isnan(volatility):
+    if not volatility or np.isnan(volatility):
         return float("nan")
     return (annualised_return(returns) - risk_free) / volatility
 
@@ -75,10 +79,10 @@ def sharpe_ratio(returns: pd.Series, risk_free: float = RISK_FREE_RATE) -> float
 def sortino_ratio(returns: pd.Series, risk_free: float = RISK_FREE_RATE) -> float:
     """Like Sharpe, but only downside deviation is treated as risk."""
     downside = returns[returns < 0]
-    if downside.empty:
+    if len(downside) < 2:
         return float("nan")
     downside_vol = float(downside.std(ddof=1) * np.sqrt(TRADING_DAYS))
-    if downside_vol == 0:
+    if not downside_vol:
         return float("nan")
     return (annualised_return(returns) - risk_free) / downside_vol
 
@@ -109,6 +113,8 @@ def value_at_risk(returns: pd.Series, confidence: float = 0.95) -> float:
 def expected_shortfall(returns: pd.Series, confidence: float = 0.95) -> float:
     """Average loss in the tail beyond the VaR threshold."""
     threshold = value_at_risk(returns, confidence)
+    if np.isnan(threshold):
+        return float("nan")
     tail = returns[returns <= threshold]
     return float(tail.mean()) if not tail.empty else float("nan")
 
@@ -119,7 +125,7 @@ def beta_vs_benchmark(returns: pd.Series, benchmark_returns: pd.Series) -> float
     if len(aligned) < 2:
         return float("nan")
     variance = aligned.iloc[:, 1].var(ddof=1)
-    if variance == 0:
+    if not variance:
         return float("nan")
     return float(aligned.cov().iloc[0, 1] / variance)
 
@@ -134,7 +140,7 @@ def tracking_error(returns: pd.Series, benchmark_returns: pd.Series) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Aggregates used by the dashboard
+# Aggregates consumed by the dashboard
 # ---------------------------------------------------------------------------
 
 def summary(prices: pd.Series, benchmark: pd.Series | None = None) -> dict:
@@ -178,17 +184,18 @@ def market_statistics(closes: pd.DataFrame) -> pd.DataFrame:
 
 
 def market_aggregates(closes: pd.DataFrame) -> dict:
-    """Market-level figures required by the brief: mean and median across
-    the instruments quoted in that market."""
+    """Market-level figures required by the brief: mean and median across the
+    instruments quoted in that market, plus their dispersion."""
     statistics = market_statistics(closes)
     if statistics.empty:
         return {}
+    returns_column = statistics["Rendimento ann. (%)"]
     return {
         "Numero strumenti": len(statistics),
-        "Rendimento medio ann. (%)": statistics["Rendimento ann. (%)"].mean(),
-        "Rendimento mediano ann. (%)": statistics["Rendimento ann. (%)"].median(),
+        "Rendimento medio ann. (%)": returns_column.mean(),
+        "Rendimento mediano ann. (%)": returns_column.median(),
         "Volatilità media ann. (%)": statistics["Volatilità ann. (%)"].mean(),
-        "Dispersione rendimenti (dev.std, %)": statistics["Rendimento ann. (%)"].std(ddof=1),
+        "Dispersione rendimenti (%)": returns_column.std(ddof=1),
         "Sharpe medio": statistics["Sharpe"].mean(),
     }
 
