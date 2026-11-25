@@ -1,0 +1,12 @@
+# Librerie della dashboard MFE e del sistema 2FA (locale)
+Dash>=3.0,<4.0
+dash-mantine-components>=2.0,<3.0
+Flask>=3.0,<4.0
+pandas>=2.0,<3.0
+plotly>=5.20,<7.0
+numpy>=1.26,<3.0
+requests>=2.31,<3.0
+argon2-cffi>=23.1,<27.0
+cryptography>=42,<48
+qrcode[pil]>=7.4,<9.0
+pytest>=8,<10

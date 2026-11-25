@@ -1,0 +1,29 @@
+:root { color-scheme: dark; --bg:#001A3E; --panel:#0A2B50; --light:#F5F8FC; --muted:#B8D2EA; --blue:#69B7FF; --border:#28547D; }
+* { box-sizing: border-box; }
+html, body { margin:0; min-height:100%; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background:var(--bg); color:var(--light); }
+body { background: radial-gradient(ellipse at 50% 0%, #173e6a 0%, #001a3e 58%); }
+.auth-page { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:32px 18px; }
+.auth-card { max-width:520px; width:100%; padding:32px 38px 36px; border:1px solid var(--border); border-radius:16px; background:rgba(10,43,80,.97); box-shadow:0 24px 70px #0005; }
+.brand { text-align:center; }
+.brand-logo { max-height:124px; max-width:140px; width:auto; object-fit:contain; display:block; margin:0 auto 13px; }
+.eyebrow { margin:0 0 8px; letter-spacing:1.6px; font-size:10px; font-weight:650; color:var(--muted); }
+h1 { font-size:25px; line-height:1.25; margin:0 0 22px; font-weight:650; }
+h2 { margin:6px 0 8px; font-size:22px; }
+.intro { color:var(--muted); font-size:14px; line-height:1.6; margin:12px 0 24px; }
+.actions { display:grid; gap:12px; }
+.button { display:block; width:100%; padding:13px 16px; margin-top:18px; border-radius:7px; border:1px solid var(--blue); text-align:center; text-decoration:none; cursor:pointer; font-family:inherit; font-size:14px; font-weight:700; }
+.button.primary { background:var(--blue); color:#001A3E; }
+.button.secondary { background:transparent; color:var(--light); margin-top:0; }
+.button:hover, .button:focus-visible { filter:brightness(1.12); outline:2px solid transparent; }
+label { display:block; margin:17px 0 7px; font-size:12px; letter-spacing:.4px; color:var(--muted); }
+input { width:100%; border:1px solid var(--border); border-radius:7px; padding:12px 13px; background:#061d3a; color:var(--light); font-size:15px; }
+input:focus { outline:2px solid var(--blue); outline-offset:1px; }
+.small { margin:20px 0 0; font-size:12px; color:var(--muted); line-height:1.6; }
+a { color:var(--blue); }
+.error { color:#ffd2d5; background:#612a36; border:1px solid #b75564; border-radius:7px; padding:12px; font-size:13px; line-height:1.5; }
+.qr { display:block; width:190px; max-width:100%; height:auto; border-radius:8px; margin:0 auto 17px; }
+.otp-key { display:block; word-break:break-all; padding:12px; text-align:center; background:#061d3a; border-radius:7px; border:1px solid var(--border); font-size:14px; letter-spacing:1px; }
+.warning { color:#ffd29c; font-size:12px; line-height:1.5; }
+.footer { color:var(--muted); font-size:12px; text-align:center; margin:24px 0 0; }
+@media (max-width: 550px) { .auth-card { padding:24px 20px; } h1 { font-size:20px; } }
+/* Lo stile della dashboard vuota è indipendente dai template auth. */

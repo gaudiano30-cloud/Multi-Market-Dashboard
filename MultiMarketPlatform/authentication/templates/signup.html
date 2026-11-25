@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Sign up</h2>
+<p class="intro">Crea le credenziali. Completerai la registrazione configurando l'OTP.</p>
+<form method="post" action="{{ url_for('auth.signup') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="username">Username</label>
+  <input id="username" name="username" type="text" autocomplete="username" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.-]{3,32}" required autofocus>
+  <label for="password">Password (almeno 12 caratteri)</label>
+  <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+  <label for="password_confirm">Conferma password</label>
+  <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+  <button type="submit" class="button primary">Crea account e configura OTP</button>
+</form>
+<p class="small">Hai già un account? <a href="{{ url_for('auth.signin') }}">Sign in</a></p>
+{% endblock %}
