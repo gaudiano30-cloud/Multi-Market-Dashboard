@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Esci</h2>
+<p class="intro">Vuoi terminare la tua sessione? Potrai accedere nuovamente con password e OTP.</p>
+<form method="post" action="{{ url_for('auth.logout') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="button primary">Conferma logout</button>
+</form>
+<p class="small"><a href="/">Torna alla dashboard</a></p>
+{% endblock %}

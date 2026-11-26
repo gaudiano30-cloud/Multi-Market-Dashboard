@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} | MFE Financial Platform</title>
+  <link rel="stylesheet" href="{{ url_for('auth.static', filename='auth.css') }}">
+</head>
+<body>
+  <div class="auth-page">
+    <main class="auth-card">
+      <div class="brand">
+        <img src="{{ url_for('auth.brand_logo') }}" alt="Logo MFE" class="brand-logo">
+        <p class="eyebrow">MASTER IN FINANCIAL ENGINEERING</p>
+        <h1>Financial Data Analysis Platform</h1>
+      </div>
+      {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+    <p class="footer">Accesso protetto con autenticazione a due fattori</p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Sign in</h2>
+<p class="intro">Primo livello: inserisci username e password.</p>
+<form method="post" action="{{ url_for('auth.signin') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="username">Username</label>
+  <input id="username" name="username" type="text" autocomplete="username" required maxlength="32" autofocus>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <button type="submit" class="button primary">Continua alla verifica OTP</button>
+</form>
+<p class="small">Non hai un account? <a href="{{ url_for('auth.signup') }}">Sign up</a></p>
+{% endblock %}
